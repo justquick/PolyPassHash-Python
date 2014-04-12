@@ -1,4 +1,0 @@
-include *.py
-include *.txt
-include *.rst
-include MANIFEST.in
