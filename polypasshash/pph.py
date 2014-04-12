@@ -3,6 +3,7 @@ import hashlib
 # For thresholdless password support...
 from Crypto.Cipher import AES
 
+from .shamirsecret import PY3
 try:
     from . import fastshamirsecret as shamirsecret
 except ImportError:
@@ -47,6 +48,8 @@ class PolyPassHash(object):
     # co-analysis of password hashes
     nextavailableshare = None
 
+    serializer = pickle
+
     def __init__(self, threshold, passwordfile=None, partialbytes=0):
 
         self.threshold = threshold
@@ -73,11 +76,8 @@ class PolyPassHash(object):
         self.knownsecret = False
         self.thresholdlesskey = None
 
-        # A real implementation would need much better error handling
-        passwordfiledata = open(passwordfile).read()
-
         # just want to deserialize this data.  Should do better validation
-        self.accountdict = pickle.loads(passwordfiledata)
+        self.accountdict = self.serializer.load(open(passwordfile, 'rb'))
 
         assert(type(self.accountdict) is dict)
 
@@ -95,6 +95,9 @@ class PolyPassHash(object):
         Creates a new account.
         Raises a ValueError if given bad data or if the system isn't initialized
         """
+        shares = int(shares)
+        if PY3:
+            password = bytes(password, encoding='utf8')
 
         if not self.knownsecret:
             raise ValueError("Password File is not unlocked!")
@@ -130,12 +133,13 @@ class PolyPassHash(object):
 
             # append the partial verification data...
             thisentry['passhash'] += saltedpasswordhash[len(saltedpasswordhash)-self.partialbytes:]
+            thisentry['passhash'] = bytes(thisentry['passhash'])
 
             self.accountdict[username].append(thisentry)
             # and exit (don't increment the share count!)
             return
 
-        for sharenumber in range(self.nextavailableshare, self.nextavailableshare+shares):
+        for sharenumber in range(self.nextavailableshare, self.nextavailableshare + shares):
             thisentry = {}
             thisentry['sharenumber'] = sharenumber
             # take the bytearray part of this
@@ -147,6 +151,7 @@ class PolyPassHash(object):
             thisentry['passhash'] = _do_bytearray_XOR(saltedpasswordhash, shamirsecretdata)
             # append the partial verification data...
             thisentry['passhash'] += saltedpasswordhash[len(saltedpasswordhash)-self.partialbytes:]
+            thisentry['passhash'] = bytes(thisentry['passhash'])
 
             self.accountdict[username].append(thisentry)
 
@@ -154,7 +159,8 @@ class PolyPassHash(object):
         self.nextavailableshare += shares
 
     def is_valid_login(self, username, password):
-        """ Check to see if a login is valid."""
+        if PY3:
+            password = bytes(password, encoding='utf8')
 
         if not self.knownsecret and self.partialbytes == 0:
             raise ValueError("Password File is not unlocked and partial verification is disabled!")
@@ -201,8 +207,8 @@ class PolyPassHash(object):
             raise ValueError("Would write undecodable password file.   Must have more shares before writing.")
 
         # Need more error checking in a real implementation
-        with open(passwordfile, 'w') as f:
-            pickle.dump(self.accountdict, f)
+        with open(passwordfile, 'wb') as f:
+            self.serializer.dump(self.accountdict, f)
 
     def unlock_password_data(self, logindata):
         """Pass this a list of username, password tuples like: [('admin',
@@ -217,6 +223,8 @@ class PolyPassHash(object):
         sharelist = []
 
         for (username, password) in logindata:
+            if PY3:
+                password = bytes(password, encoding='utf8')
             if username not in self.accountdict:
                 raise ValueError("Unknown user '"+username+"'")
 

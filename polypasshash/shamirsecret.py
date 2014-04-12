@@ -1,9 +1,13 @@
 import os
+import sys
 
 try:
     import fastpolymath_c as fastpolymath
 except ImportError:
     fastpolymath = None
+
+PY3 = sys.version_info.major == 3
+SPEEDUP = False
 
 
 class ShamirSecret(object):
@@ -31,6 +35,8 @@ class ShamirSecret(object):
                 # this is the polynomial.   The first byte is the secretdata.
                 # The next threshold-1 are (crypto) random coefficients
                 # I'm applying Shamir's secret sharing separately on each byte.
+                if PY3:
+                    secretbyte = bytes(secretbyte, encoding='utf8')
                 thesecoefficients = bytearray(secretbyte + os.urandom(threshold - 1))
 
                 self._coefficients.append(thesecoefficients)
@@ -163,8 +169,8 @@ def _f(x, coefs_bytes):
     if x == 0:
         raise ValueError('invalid share index value, cannot be 0')
 
-    if fastpolymath:
-        return fastpolymath.f(x, coefs_bytes)
+    if fastpolymath and SPEEDUP:
+        return fastpolymath.f(chr(x), str(coefs_bytes))
 
     accumulator = 0
 
@@ -237,7 +243,15 @@ def _add_polynomials(a, b):
 def _full_lagrange(xs, fxs):
     assert(len(xs) == len(fxs))
 
-    if fastpolymath:
+    if fastpolymath and SPEEDUP:
+        newxs = bytearray('')
+        for item in xs:
+            newxs.append(item)
+
+        newfxs = bytearray('')
+        for item in fxs:
+            newfxs.append(item)
+
         return fastpolymath.full_lagrange(xs, fxs)
 
     returnedcoefficients = []
